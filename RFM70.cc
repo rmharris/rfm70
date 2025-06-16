@@ -1,16 +1,13 @@
-// Copyright (c) 2014, Robert Harris.
+// Copyright (c) 2014, 2025 Robert Harris.
 
 #include <RFM70.h>
 #include <RFM70_impl.h>
-#include <wiringPi.h>
-#include <wiringPiSPI.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <SPI.h>
 
 
 RFM70::RFM70(byte slaveselect, byte ce, byte irq)
 {
-	//_slaveselect = slaveselect;
+	_slaveselect = slaveselect;
 	_ce = ce;
 	_irq = irq;
 	_bank = BANK_UNINITIALISED;
@@ -18,9 +15,9 @@ RFM70::RFM70(byte slaveselect, byte ce, byte irq)
 
 void RFM70::begin(void)
 {
-	//pinMode(_slaveselect, OUTPUT);
+	pinMode(_slaveselect, OUTPUT);
 	pinMode(_ce, OUTPUT);
-	//digitalWrite(_slaveselect, HIGH);
+	digitalWrite(_slaveselect, HIGH);
 
 	/* The sample code implies that one needs to delay for > 50 ms. */
 	delay(200);
@@ -42,7 +39,7 @@ void RFM70::config_magic(void)
 	write(R_RB1_05, 0x24, 0x06, 0x7f, 0xa6);
 	write(R_RB1_06, 0x00, 0x00, 0x00, 0x00);
 	write(R_RB1_07, 0x00, 0x00, 0x00, 0x00);
-	//write(R_CHIP_ID, 0x00, 0x00, 0x00, 0x00);
+	write(R_CHIP_ID, 0x00, 0x00, 0x00, 0x00);
 
 	write(R_RB1_09, 0x00, 0x00, 0x00, 0x00);
 	write(R_RB1_0A, 0x00, 0x00, 0x00, 0x00);
@@ -68,16 +65,12 @@ byte RFM70::command(byte command, byte address, byte *data, byte len)
 {
 	byte write;
 	byte val;
-	unsigned int i;
-	byte bigbuf[40];
-	
+
 	/*
 	 * We determine whether or not the command will require a read from
 	 * or a write to an array, and perform any special preparation.
 	 */
-	switch (command) {
-	case C_R_REGISTER:
-	case C_W_REGISTER:
+	if (command == C_R_REGISTER || command == C_W_REGISTER) {
 		/*
 		 * A C_R_REGISTER or C_W_REGISTER command operates on a
 		 * specific register; indeed, the register address must be
@@ -97,7 +90,7 @@ byte RFM70::command(byte command, byte address, byte *data, byte len)
 		 * we avoid recursing indefinitely.
 		 */
 		byte bank;
-#ifndef nRF24L01
+
 		if (_bank == BANK_UNINITIALISED) {
 			byte status;
 			_bank = 0;
@@ -112,92 +105,38 @@ byte RFM70::command(byte command, byte address, byte *data, byte len)
 			(void) RFM70::command(C_ACTIVATE, 0, &activate, 1);
 			_bank = bank;
 		}
-#endif
 
 		write = (command == C_W_REGISTER) ? 1 : 0;
 		command |= (address & ~BANK_FLAG);
-		break;
-	case C_W_ACK_PAYLOAD:
+	} else if (command == C_W_ACK_PAYLOAD) {
 		/*		
 		 * The C_W_ACK_PAYLOAD command also operates on a pipe
 		 * address and this too is OR'd into the command itself.
 		 */
 	 	write = 1;
 		command |= address;
-		break;
-	case C_W_TX_PAYLOAD:
-	case C_ACTIVATE:
-	case C_W_TX_PAYLOAD_NO_ACK:
+	} else if (command ==  C_W_TX_PAYLOAD ||
+	    command == C_ACTIVATE ||
+	    command == C_W_TX_PAYLOAD_NO_ACK) {
 		write = 1;
-		break;
-	default:
+	} else {
 		write = 0;
-		break;
 	}
 
-	
-	bigbuf[0] = command;
-	
-	for (i = 0; i < len; i++)
-		bigbuf[i + 1] = (write == 1) ? data[i] : 0;
-	
-	
-	//printf("sending ");
-	//for (i = 0; i < len + 1; i++)
-	//	printf("0x%hhx ", bigbuf[i]);
-	//printf("\n");
-	
-	wiringPiSPIDataRW(0, bigbuf, len + 1);
-	//printf("recevied ");
-	//for (i = 0; i < len + 1; i++)
-	//	printf("0x%hhx ", bigbuf[i]);
-	//printf("\n");
-	
-	if (write == 0) {
-	for (i = 0; i < len; i++)
-		data[i] = bigbuf[i + 1];
-	}
-	
-	
-	
 	/* Send the command and write or read the data. */
-	//digitalWrite(_slaveselect, LOW);
-	/*
-	printf("Writing one byte: 0x%hhx\n", command);
-	wiringPiSPIDataRW(0, &command, 1);
-	printf("swapped with: 0x%hhx\n", command);
-	
-	//val = SPI.transfer(command);
-	
-	
-	if (write == 0) {
-		for (i = 0; i < len; i++)
-			data[i] = 0;
-	}
-		wiringPiSPIDataRW(0, data, len);
-	
-	
-	for (i = 0; i < len; i++)
-		printf("0x%hhx ", data[i]);
-	printf("\n");
-	
-	
-	
+	digitalWrite(_slaveselect, LOW);
+	val = SPI.transfer(command);
 	while (len--) {
 		if (write)
 			(void) SPI.transfer(*data++);
 		else
 			*data++ = SPI.transfer(0x00);
 	}
-	 */
-	
-	//digitalWrite(_slaveselect, HIGH);
+	digitalWrite(_slaveselect, HIGH);
 
-	
-	
 	delay(20);
 
-	return (command);
+	return (val);
 }
 
 void RFM70::read(byte reg, byte *data, byte len)
@@ -297,62 +236,70 @@ void RFM70::dump_reg(byte reg, byte val)
 
 	byte rxpno;
 
-	printf("----------\n");
+	Serial.println("----------");
 	switch(reg) {
 	case R_CONFIG:
-		printf("R_CONFIG: 0x%hhx\n", val);
+		Serial.print("R_CONFIG: 0x");
+		Serial.println(val, HEX);
 		if (val & B_CONFIG_MASK_RX_DR)
-			printf("MASK_RX_DR ");
+			Serial.print("MASK_RX_DR ");
 		if (val & B_CONFIG_MASK_TX_DS)
-			printf("MASK_TX_DS ");
+			Serial.print("MASK_TX_DS ");
 		if (val & B_CONFIG_MASK_MAX_RT)
-			printf("MASK_MAX_RT ");
+			Serial.print("MASK_MAX_RT ");
 		if (val & B_CONFIG_EN_CRC)
-			printf("EN_CRC ");
+			Serial.print("EN_CRC ");
 		if (val & B_CONFIG_CRCO)
-			printf("CRCO ");
+			Serial.print("CRCO ");
 		if (val & B_CONFIG_PWR_UP)
-			printf("PWR_UP ");
+			Serial.print("PWR_UP ");
 		if (val & B_CONFIG_PRIM_RX)
-			printf("PRIM_RX ");
+			Serial.print("PRIM_RX ");
 		if (val)
-			printf("\n");
+			Serial.println("");
 		break;
 	case R_STATUS:
-		printf("R_STATUS: 0x%hhx\n", val);
-		printf("Register bank %d selected\n", (val & B_STATUS_RBANK) ? 1 : 0);
+		Serial.print("R_STATUS: 0x");
+		Serial.println(val, HEX);
+		Serial.print("Register bank ");
+		Serial.print((val & B_STATUS_RBANK) ? 1 : 0, DEC);
+		Serial.println(" selected.");
 		if (val & B_STATUS_RX_DR)
-			printf("Data Ready RX FIFO interrupt\n");
+			Serial.println("Data Ready RX FIFO interrupt");
 		if (val & B_STATUS_TX_DS)
-			printf("Data Sent TX FIFO interrupt\n");
+			Serial.println("Data Sent TX FIFO interrupt");
 		if (val & B_STATUS_MAX_RT)
-			printf("Maximum TX retries interrupt\n");
+			Serial.println("Maximum TX retries interrupt");
 		rxpno = val & M_STATUS_RX_P_NO;
 		rxpno >>= 1;
 		if (rxpno == 7) {
-			printf("RX FIFO empty\n");
+			Serial.println("RX FIFO empty");
 		} else {
-			printf("Available payload in pipe %d.", rxpno);
+			Serial.print("Available payload in pipe ");
+			Serial.println(rxpno, DEC);
 		}
 		break;
 	case R_FIFO_STATUS:
-		printf("R_FIFO_STATUS: 0x%hhx\n", val);
+		Serial.print("R_FIFO_STATUS: 0x");
+		Serial.println(val, HEX);
 		if (val & B_FIFO_STATUS_TX_FULL)
-			printf("TX_FULL ");
+			Serial.print("TX_FULL ");
 		if (val & B_FIFO_STATUS_TX_EMPTY)
-			printf("TX_EMPTY ");
+			Serial.print("TX_EMPTY ");
 		if (val & B_FIFO_STATUS_RX_FULL)
-			printf("RX_FULL ");
+			Serial.print("RX_FULL ");
 		if (val & B_FIFO_STATUS_RX_EMPTY)
-			printf("RX_EMPTY ");
+			Serial.print("RX_EMPTY ");
 		if (val)
-			printf("\n");
+			Serial.println("");
 		
 		break;
 	default:
 		break;
 	}
-	printf("----------\n");
+	Serial.println("----------");
+
+
 }
 
 void

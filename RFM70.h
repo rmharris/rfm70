@@ -1,9 +1,9 @@
- // Copyright (c) 2014, 2022 Robert Harris.
+// Copyright (c) 2014, 2025 Robert Harris.
 
 #ifndef	RFM70_H
 #define	RFM70_H
 
-typedef unsigned char byte;
+#include "Arduino.h"
 
 class RFM70
 {

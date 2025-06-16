@@ -1,4 +1,4 @@
-// Copyright (c) 2014, 2022 Robert Harris.
+// Copyright (c) 2014, 2025 Robert Harris.
 
 #ifndef RFM70_IMPL_H
 #define RFM70_IMPL_H
@@ -119,11 +119,7 @@
 #define	R_RF_SETUP		0x06
 #define	B_RF_SETUP_RF_DR	0x08
 #define	B_RF_SETUP_LNA_HCURR	0x01
-#ifndef	nRF24L01
 #define	V_RF_SETUP_MAGIC	0x10
-#else
-#define V_RF_SETUP_MAGIC        0x00
-#endif
 #define	V_RF_SETUP_DR_1MBPS	0x00
 #define	V_RF_SETUP_DR_2MBPS	0x08
 #define	V_RF_SETUP_PWR_m10DBM	0x00
